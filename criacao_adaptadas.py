@@ -31,6 +31,7 @@ def desenhar_etiqueta(c, x, y, largura, altura, tabela, logo, championship, stag
         {championship} <br/>
         <b>{stage}</b> <br/>
         <b>ESCOLA: {tabela['NOME ESCOLA']}</b> <br/>
+        <b>CATEGORIA: {tabela['CATEGORIA']}</b> <br/>
         <b>{tabela['ANO ESCOLAR']} PROVAS: {tabela['TOTAL']}</b>
     """, paragraph_label_style)
     
