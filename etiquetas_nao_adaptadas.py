@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from streamlit_aggrid import AgGrid
 from criacao_nao_adaptadas import gerar_etiquetas
 import re
 

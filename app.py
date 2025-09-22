@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from etiquetas_nao_adaptadas import interface_nao_adaptadas
 from etiquetas_adaptadas import interface_adaptadas
-from streamlit_aggrid import AgGrid, GridOptionsBuilder, DataReturnMode, GridUpdateMode  # <- MUDAR apenas esta linha
 
 st.set_page_config(page_title="Etiquetas de Provas", layout="wide")
 

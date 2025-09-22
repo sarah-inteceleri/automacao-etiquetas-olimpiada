@@ -28,7 +28,7 @@ def interface_adaptadas():
             df = pd.read_excel(uploaded_file)
 
         df.columns = [col.upper() for col in df.columns]
-        df = df.rename(columns={'ESCOLA': 'NOME ESCOLA', 'ANO': 'ANO ESCOLAR'})
+        df = df.rename(columns={'ESCOLA': 'NOME ESCOLA', 'ANO': 'ANO ESCOLAR', 'CATEGORIA': 'CATEGORIA'})
         df['ANO ESCOLAR'] = df['ANO ESCOLAR'].astype(str).str.strip()
         df.loc[~df['ANO ESCOLAR'].str.upper().str.contains("EJAI"), 'ANO ESCOLAR'] += " ANO"
 
