@@ -8,11 +8,63 @@ def convert_df(df: pd.DataFrame):
     return df.to_csv(index=False).encode('utf-8')
 
 def limpar_nome_escola(escola):
-    escola = re.sub(r"\(INEP:\s*\d+\)", "", str(escola), flags=re.IGNORECASE).strip()
-    escola = re.sub(r"\b([A-Z])\s+([A-Z])\b", r"\1\2", escola)
-    siglas = ["CMEI", "EMEI", "EMEF", "EM", "EJA", "CMEF"]
-    padrao = r"^(?:" + "|".join(siglas) + r")\s+"
-    return re.sub(padrao, "", escola, flags=re.IGNORECASE).strip()
+    """Remove siglas e códigos INEP dos nomes das escolas"""
+    if pd.isna(escola):
+        return escola
+    
+    escola_original = str(escola).strip()
+    escola = escola_original.upper()  # Trabalhar em maiúsculas para facilitar
+    
+    # Remover códigos INEP
+    escola = re.sub(r"\(INEP:\s*\d+\)", "", escola, flags=re.IGNORECASE).strip()
+    
+    # Lista de siglas para remover do início (mais conservadora)
+    siglas_patterns = [
+        # Siglas com espaços entre letras - mais específicas
+        r"^E\s+M\s+E\s+I\s+F\s+",  # E M E I F (com espaços obrigatórios)
+        r"^E\s+M\s+E\s+F\s+",      # E M E F (com espaços obrigatórios)
+        r"^E\s+M\s+E\s+I\s+",      # E M E I (com espaços obrigatórios)  
+        r"^C\s+M\s+E\s+I\s+",      # C M E I (com espaços obrigatórios)
+        
+        # Siglas sem espaços - versões completas primeiro
+        r"^ESCOLA\s+MUNICIPAL\s+DE\s+ENSINO\s+FUNDAMENTAL\s+E\s+INFANTIL\s+",
+        r"^ESCOLA\s+MUNICIPAL\s+DE\s+ENSINO\s+FUNDAMENTAL\s+",
+        r"^ESCOLA\s+MUNICIPAL\s+DE\s+ENSINO\s+INFANTIL\s+",
+        r"^ESCOLA\s+MUNICIPAL\s+",
+        r"^CENTRO\s+MUNICIPAL\s+DE\s+EDUCACAO\s+INFANTIL\s+",
+        r"^CENTRO\s+MUNICIPAL\s+",
+        r"^ESC\s+MUNICIPAL\s+",
+        r"^ESC\s+MUN\s+",
+        r"^CMEBI\s+",
+        r"^CMEI\s+", 
+        r"^CMEF\s+",
+        r"^EMEI\s+",
+        r"^EMEF\s+",
+        
+        # Siglas isoladas com espaços - apenas no final
+        r"^E\s+I\s+F\s+",         # E I F
+        r"^E\s+F\s+",             # E F
+        r"^EJA\s+",
+        r"^EM\s+(?!E)",           # EM mas não quando seguido de E (evita remover de "EM ESPERANÇA")
+    ]
+    
+    # Aplicar remoção das siglas com mais cuidado
+    for pattern in siglas_patterns:
+        if re.match(pattern, escola, flags=re.IGNORECASE):
+            escola_nova = re.sub(pattern, "", escola, flags=re.IGNORECASE).strip()
+            # Verificar se sobrou um nome válido
+            if len(escola_nova) >= 5:  # Aumentei o mínimo para 5 caracteres
+                escola = escola_nova
+                break
+    
+    # Limpeza final muito suave
+    escola = re.sub(r'\s+', ' ', escola).strip()
+    
+    # Se o nome ficou muito pequeno ou vazio, retorna o original
+    if len(escola) < 5:
+        return escola_original.upper().strip()
+    
+    return escola
 
 def interface_nao_adaptadas():
     st.header("Etiquetas - Provas Não Adaptadas")
@@ -25,25 +77,25 @@ def interface_nao_adaptadas():
     st.markdown("**Colunas opcionais (anos escolares):**")
     colunas_esperadas = [
         "Total de alunos do 1º ano da MANHÃ",
-        "Total de alunos do 1º ano  da TARDE", 
-        "Total de alunos do 2º  ano da MANHÃ",
-        "Total de alunos do 2º  ano da TARDE",
-        "Total de alunos do 3º  ano da MANHÃ",
-        "Total de alunos do 3º  ano da TARDE",
-        "Total de alunos do 4º  ano da MANHÃ", 
-        "Total de alunos do 4º  ano da TARDE",
-        "Total de alunos do 5º  ano da MANHÃ",
-        "Total de alunos do 5º  ano  da TARDE",
-        "Total de alunos do 6º ano  da MANHÃ",
-        "Total de alunos do 6º ano  da TARDE",
-        "Total de alunos do 7º  ano da MANHÃ",
-        "Total de alunos do 7º  ano da TARDE", 
-        "Total de alunos do 8º  ano da MANHÃ",
-        "Total de alunos do 8º  ano da TARDE",
-        "Total de alunos do 9º  ano da MANHÃ",
-        "Total de alunos do 9º  ano da TARDE",
-        "Total de alunos da  EJAI 1ª TOTALIDADE",
-        "Total de alunos da  EJAI 2ª TOTALIDADE",
+        "Total de alunos do 1º ano da TARDE", 
+        "Total de alunos do 2º ano da MANHÃ",
+        "Total de alunos do 2º ano da TARDE",
+        "Total de alunos do 3º ano da MANHÃ",
+        "Total de alunos do 3º ano da TARDE",
+        "Total de alunos do 4º ano da MANHÃ", 
+        "Total de alunos do 4º ano da TARDE",
+        "Total de alunos do 5º ano da MANHÃ",
+        "Total de alunos do 5º ano da TARDE",
+        "Total de alunos do 6º ano da MANHÃ",
+        "Total de alunos do 6º ano da TARDE",
+        "Total de alunos do 7º ano da MANHÃ",
+        "Total de alunos do 7º ano da TARDE", 
+        "Total de alunos do 8º ano da MANHÃ",
+        "Total de alunos do 8º ano da TARDE",
+        "Total de alunos do 9º ano da MANHÃ",
+        "Total de alunos do 9º ano da TARDE",
+        "Total de alunos da EJAI 1ª TOTALIDADE",
+        "Total de alunos da EJAI 2ª TOTALIDADE",
         "Total de alunos da EJAI 3ª TOTALIDADE", 
         "Total de alunos da EJAI 4ª TOTALIDADE"
     ]
@@ -80,25 +132,25 @@ def interface_nao_adaptadas():
             rename_map = {
                 'Qual é o nome da sua escola?': 'NOME ESCOLA',
                 'Total de alunos do 1º ano da MANHÃ': '1º ANO MANHÃ',
-                'Total de alunos do 1º ano  da TARDE': '1º ANO TARDE',
-                'Total de alunos do 2º  ano da MANHÃ': '2º ANO MANHÃ',
-                'Total de alunos do 2º  ano da TARDE': '2º ANO TARDE',
-                'Total de alunos do 3º  ano da MANHÃ': '3º ANO MANHÃ',
-                'Total de alunos do 3º  ano da TARDE': '3º ANO TARDE',
-                'Total de alunos do 4º  ano da MANHÃ': '4º ANO MANHÃ',
-                'Total de alunos do 4º  ano da TARDE': '4º ANO TARDE',
-                'Total de alunos do 5º  ano da MANHÃ': '5º ANO MANHÃ',
-                'Total de alunos do 5º  ano  da TARDE': '5º ANO TARDE',
-                'Total de alunos do 6º ano  da MANHÃ': '6º ANO MANHÃ',
-                'Total de alunos do 6º ano  da TARDE': '6º ANO TARDE',
-                'Total de alunos do 7º  ano da MANHÃ': '7º ANO MANHÃ',
-                'Total de alunos do 7º  ano da TARDE': '7º ANO TARDE',
-                'Total de alunos do 8º  ano da MANHÃ': '8º ANO MANHÃ',
-                'Total de alunos do 8º  ano da TARDE': '8º ANO TARDE',
-                'Total de alunos do 9º  ano da MANHÃ': '9º ANO MANHÃ',
-                'Total de alunos do 9º  ano da TARDE': '9º ANO TARDE',
-                'Total de alunos da  EJAI 1ª TOTALIDADE': 'EJAI 1º ANO',
-                'Total de alunos da  EJAI 2ª TOTALIDADE': 'EJAI 2º ANO',
+                'Total de alunos do 1º ano da TARDE': '1º ANO TARDE',
+                'Total de alunos do 2º ano da MANHÃ': '2º ANO MANHÃ',
+                'Total de alunos do 2º ano da TARDE': '2º ANO TARDE',
+                'Total de alunos do 3º ano da MANHÃ': '3º ANO MANHÃ',
+                'Total de alunos do 3º ano da TARDE': '3º ANO TARDE',
+                'Total de alunos do 4º ano da MANHÃ': '4º ANO MANHÃ',
+                'Total de alunos do 4º ano da TARDE': '4º ANO TARDE',
+                'Total de alunos do 5º ano da MANHÃ': '5º ANO MANHÃ',
+                'Total de alunos do 5º ano da TARDE': '5º ANO TARDE',
+                'Total de alunos do 6º ano da MANHÃ': '6º ANO MANHÃ',
+                'Total de alunos do 6º ano da TARDE': '6º ANO TARDE',
+                'Total de alunos do 7º ano da MANHÃ': '7º ANO MANHÃ',
+                'Total de alunos do 7º ano da TARDE': '7º ANO TARDE',
+                'Total de alunos do 8º ano da MANHÃ': '8º ANO MANHÃ',
+                'Total de alunos do 8º ano da TARDE': '8º ANO TARDE',
+                'Total de alunos do 9º ano da MANHÃ': '9º ANO MANHÃ',
+                'Total de alunos do 9º ano da TARDE': '9º ANO TARDE',
+                'Total de alunos da EJAI 1ª TOTALIDADE': 'EJAI 1º ANO',
+                'Total de alunos da EJAI 2ª TOTALIDADE': 'EJAI 2º ANO',
                 'Total de alunos da EJAI 3ª TOTALIDADE': 'EJAI 3º ANO',
                 'Total de alunos da EJAI 4ª TOTALIDADE': 'EJAI 4º ANO'
             }
@@ -134,7 +186,8 @@ def interface_nao_adaptadas():
             )
             
             # Limpar e processar dados
-            clean_df = newnew_df.dropna()
+            clean_df = newnew_df.copy()
+            clean_df = clean_df.dropna()
             clean_df["TOTAL"] = pd.to_numeric(clean_df["TOTAL"], errors='coerce').fillna(0).astype(int)
             clean_df = clean_df[clean_df["TOTAL"] > 0]
 
@@ -142,8 +195,49 @@ def interface_nao_adaptadas():
                 st.warning("⚠️ Não foram encontrados dados válidos (valores maiores que 0) na planilha!")
                 st.stop()
 
-            clean_df["NOME ESCOLA"] = clean_df['NOME ESCOLA'].apply(limpar_nome_escola).str.upper()
-            clean_df = clean_df.sort_values(by='NOME ESCOLA')
+            # Aplicar a função corrigida de limpeza dos nomes das escolas
+            # Debug: contar escolas antes da limpeza
+            escolas_antes = new_df['NOME ESCOLA'].nunique()
+            escolas_originais_lista = new_df['NOME ESCOLA'].unique()
+            
+            clean_df["NOME ESCOLA"] = clean_df['NOME ESCOLA'].apply(limpar_nome_escola)
+            clean_df = clean_df.sort_values(by='NOME ESCOLA').reset_index(drop=True)
+            
+            # Debug: contar escolas depois da limpeza
+            escolas_depois = clean_df['NOME ESCOLA'].nunique()
+            
+            # Se perdeu escolas, mostrar aviso
+            if escolas_depois < escolas_antes:
+                st.warning(f"⚠️ Atenção: {escolas_antes - escolas_depois} escola(s) foram perdidas na limpeza dos nomes. Total original: {escolas_antes}, Total após limpeza: {escolas_depois}")
+                
+                # Identificar quais escolas foram perdidas
+                escolas_processadas = set()
+                for escola_original in escolas_originais_lista:
+                    escola_limpa = limpar_nome_escola(escola_original)
+                    if len(escola_limpa) >= 5:  # Só adiciona se passou na validação
+                        escolas_processadas.add(escola_limpa)
+                
+                escolas_originais_set = set(escolas_originais_lista)
+                
+                with st.expander("🚨 VER ESCOLAS PERDIDAS - CLIQUE AQUI"):
+                    st.write("**📊 Resumo:**")
+                    st.write(f"- Escolas na planilha original: {len(escolas_originais_set)}")
+                    st.write(f"- Escolas após processamento: {len(escolas_processadas)}")
+                    st.write(f"- Escolas perdidas: {len(escolas_originais_set) - len(escolas_processadas)}")
+                    
+                    st.write("**🔍 Análise detalhada das primeiras 15 escolas:**")
+                    for i, escola in enumerate(list(escolas_originais_lista)[:15]):
+                        escola_limpa = limpar_nome_escola(escola)
+                        status = "✅ OK" if len(escola_limpa) >= 5 else "❌ PERDIDA"
+                        
+                        st.write(f"**{i+1}.** {status}")
+                        st.write(f"   📝 Original: `{escola}`")
+                        st.write(f"   🔧 Processado: `{escola_limpa}` (tamanho: {len(escola_limpa)})")
+                        
+                        if len(escola_limpa) < 5:
+                            st.write(f"   ⚠️ **MOTIVO DA PERDA:** Nome muito curto após limpeza")
+                        
+                        st.write("---")
 
             # Mostrar resumo dos dados
             st.markdown("### 📈 Resumo dos Dados Processados:")
@@ -155,9 +249,11 @@ def interface_nao_adaptadas():
             with col3:
                 st.metric("Total de Alunos", clean_df['TOTAL'].sum())
 
-            # Exibir dados processados
+            # Exibir dados processados usando st.dataframe em vez de AgGrid
             st.markdown("### 📋 Dados Processados:")
-            AgGrid(clean_df)
+            st.dataframe(clean_df, use_container_width=True, hide_index=True)
+
+
 
             st.download_button(
                 "📥 Baixar Planilha Tratada", 
@@ -168,7 +264,7 @@ def interface_nao_adaptadas():
 
             # Seção para gerar PDF
             st.markdown("### 🏷️ Gerar Etiquetas PDF")
-            logo_file = st.file_uploader("Carregue a imagem da logo", type=["png", "jpg", "jpeg"])
+            logo_file = st.file_uploader("Carregue a imagem da logo (formato JPEG)", type=["jpg", "jpeg"])
             championship = st.text_input("Nome do Campeonato").upper()
             stage = st.text_input("Etapa").upper()
 
