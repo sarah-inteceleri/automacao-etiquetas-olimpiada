@@ -7,64 +7,96 @@ import re
 def convert_df(df: pd.DataFrame):
     return df.to_csv(index=False).encode('utf-8')
 
-def limpar_nome_escola(escola):
-    """Remove siglas e códigos INEP dos nomes das escolas"""
-    if pd.isna(escola):
-        return escola
+def limpar_nome_escola_simples(nome):
+    """Função SUPER SIMPLES para limpar nomes - SEM PERDER ESCOLAS"""
+    if pd.isna(nome):
+        return nome
     
-    escola_original = str(escola).strip()
-    escola = escola_original.upper()  # Trabalhar em maiúsculas para facilitar
+    nome = str(nome).upper().strip()
     
-    # Remover códigos INEP
-    escola = re.sub(r"\(INEP:\s*\d+\)", "", escola, flags=re.IGNORECASE).strip()
+    # Remove códigos INEP se existirem
+    nome = re.sub(r"\(INEP:\s*\d+\)", "", nome).strip()
     
-    # Lista de siglas para remover do início (mais conservadora)
-    siglas_patterns = [
-        # Siglas com espaços entre letras - mais específicas
-        r"^E\s+M\s+E\s+I\s+F\s+",  # E M E I F (com espaços obrigatórios)
-        r"^E\s+M\s+E\s+F\s+",      # E M E F (com espaços obrigatórios)
-        r"^E\s+M\s+E\s+I\s+",      # E M E I (com espaços obrigatórios)  
-        r"^C\s+M\s+E\s+I\s+",      # C M E I (com espaços obrigatórios)
-        
-        # Siglas sem espaços - versões completas primeiro
-        r"^ESCOLA\s+MUNICIPAL\s+DE\s+ENSINO\s+FUNDAMENTAL\s+E\s+INFANTIL\s+",
-        r"^ESCOLA\s+MUNICIPAL\s+DE\s+ENSINO\s+FUNDAMENTAL\s+",
-        r"^ESCOLA\s+MUNICIPAL\s+DE\s+ENSINO\s+INFANTIL\s+",
-        r"^ESCOLA\s+MUNICIPAL\s+",
-        r"^CENTRO\s+MUNICIPAL\s+DE\s+EDUCACAO\s+INFANTIL\s+",
-        r"^CENTRO\s+MUNICIPAL\s+",
-        r"^ESC\s+MUNICIPAL\s+",
-        r"^ESC\s+MUN\s+",
-        r"^CMEBI\s+",
-        r"^CMEI\s+", 
-        r"^CMEF\s+",
-        r"^EMEI\s+",
-        r"^EMEF\s+",
-        
-        # Siglas isoladas com espaços - apenas no final
-        r"^E\s+I\s+F\s+",         # E I F
-        r"^E\s+F\s+",             # E F
-        r"^EJA\s+",
-        r"^EM\s+(?!E)",           # EM mas não quando seguido de E (evita remover de "EM ESPERANÇA")
+    # Lista simples de substituições - apenas remove do início
+    siglas_para_remover = [
+        "E.M.E.F. ",
+        "E.M.E.I.F. ",
+        "M.E.I.F ",
+        "E M E I F ",
+        "E M E F I ",
+        "E M E F ", 
+        "E M E I ",
+        "C M E I ",
+        "ESC EST ",
+        "ESC ",
+        "EMEF ",
+        "EMEI ",
+        "EMEIF ",
+        "CMEI ",
+        "CMEF ",
+        "CMEIF ",
+        "ESCOLA MUNICIPAL DE ENSINO FUNDAMENTAL E INFANTIL ",
+        "ESCOLA MUNICIPAL DE ENSINO FUNDAMENTAL ",
+        "ESCOLA MUNICIPAL DE ENSINO INFANTIL ",
+        "ESCOLA MUNICIPAL ",
+        "CENTRO MUNICIPAL DE EDUCACAO INFANTIL ",
+        "CENTRO MUNICIPAL ",
+        "ESCOLA ",
+        "ESC MUNICIPAL ",
+        "ESC MUN ",
+        "E I F ",
+        "E F ",
     ]
     
-    # Aplicar remoção das siglas com mais cuidado
-    for pattern in siglas_patterns:
-        if re.match(pattern, escola, flags=re.IGNORECASE):
-            escola_nova = re.sub(pattern, "", escola, flags=re.IGNORECASE).strip()
-            # Verificar se sobrou um nome válido
-            if len(escola_nova) >= 5:  # Aumentei o mínimo para 5 caracteres
-                escola = escola_nova
+    # Remover apenas se começar com a sigla E sobrar nome decente
+    nome_original = nome
+    for sigla in siglas_para_remover:
+        if nome.startswith(sigla):
+            nome_sem_sigla = nome[len(sigla):].strip()
+            if len(nome_sem_sigla) > 3:  # Só aceita se sobrar um nome
+                nome = nome_sem_sigla
                 break
     
-    # Limpeza final muito suave
-    escola = re.sub(r'\s+', ' ', escola).strip()
+    # Se deu algo errado, volta pro original
+    if len(nome) < 3:
+        nome = nome_original
+        
+    return nome
+
+def detectar_colunas_automaticamente(df):
+    """Detecta automaticamente as colunas da planilha e cria mapeamento dinâmico"""
     
-    # Se o nome ficou muito pequeno ou vazio, retorna o original
-    if len(escola) < 5:
-        return escola_original.upper().strip()
+    # Coluna obrigatória (nome da escola)
+    coluna_escola = None
+    for col in df.columns:
+        if 'escola' in col.lower():
+            coluna_escola = col
+            break
     
-    return escola
+    if not coluna_escola:
+        return None, "Coluna com nome da escola não encontrada!"
+    
+    # Detectar colunas de alunos automaticamente
+    colunas_alunos = []
+    for col in df.columns:
+        col_lower = col.lower()
+        # Procura por padrões como "total", "aluno", números, "manhã", "tarde", "eja", etc.
+        if any(palavra in col_lower for palavra in ['total', 'aluno', '1º', '2º', '3º', '4º', '5º', 
+                                                    '6º', '7º', '8º', '9º', 'eja', 'manhã', 'tarde']):
+            if col != coluna_escola:  # Não incluir a coluna da escola
+                colunas_alunos.append(col)
+    
+    # Criar mapeamento dinâmico
+    mapeamento = {coluna_escola: 'NOME ESCOLA'}
+    
+    # Para cada coluna de alunos, criar um nome mais limpo
+    for col in colunas_alunos:
+        nome_limpo = col.replace('Total de alunos do ', '').replace('Total de alunos da ', '')
+        nome_limpo = nome_limpo.replace(' da ', ' ').replace(' do ', ' ')
+        nome_limpo = nome_limpo.upper().strip()
+        mapeamento[col] = nome_limpo
+    
+    return mapeamento, None
 
 def interface_nao_adaptadas():
     st.header("Etiquetas - Provas Não Adaptadas")
@@ -94,10 +126,10 @@ def interface_nao_adaptadas():
         "Total de alunos do 8º ano da TARDE",
         "Total de alunos do 9º ano da MANHÃ",
         "Total de alunos do 9º ano da TARDE",
-        "Total de alunos da EJAI 1ª TOTALIDADE",
-        "Total de alunos da EJAI 2ª TOTALIDADE",
-        "Total de alunos da EJAI 3ª TOTALIDADE", 
-        "Total de alunos da EJAI 4ª TOTALIDADE"
+        "Total de alunos da EJA 1°",
+        "Total de alunos da EJA 2°",
+        "Total de alunos da EJA 3°", 
+        "Total de alunos da EJA 4°"
     ]
     
     # Criar texto copiável com todas as colunas
@@ -115,9 +147,9 @@ def interface_nao_adaptadas():
     exemplo = {
         "Qual é o nome da sua escola?": ["ESCOLA MUNICIPAL PEIXE-BOI"],
         "Total de alunos do 1º ano da MANHÃ": [25],
-        "Total de alunos do 1º ano  da TARDE": [20],
-        "Total de alunos do 2º  ano da MANHÃ": [30],
-        "Total de alunos do 2º  ano da TARDE": [28],
+        "Total de alunos do 1º ano da TARDE": [20],
+        "Total de alunos do 2º ano da MANHÃ": [30],
+        "Total de alunos do 2º ano da TARDE": [28],
     }
     st.markdown("### 📊 Estrutura esperada da planilha:")
     st.dataframe(pd.DataFrame(exemplo))
@@ -126,160 +158,131 @@ def interface_nao_adaptadas():
 
     if uploaded_file:
         try:
-            labels_df = pd.read_csv(uploaded_file)
+            df = pd.read_csv(uploaded_file)
             
-            # Mapeamento completo de colunas
-            rename_map = {
-                'Qual é o nome da sua escola?': 'NOME ESCOLA',
-                'Total de alunos do 1º ano da MANHÃ': '1º ANO MANHÃ',
-                'Total de alunos do 1º ano da TARDE': '1º ANO TARDE',
-                'Total de alunos do 2º ano da MANHÃ': '2º ANO MANHÃ',
-                'Total de alunos do 2º ano da TARDE': '2º ANO TARDE',
-                'Total de alunos do 3º ano da MANHÃ': '3º ANO MANHÃ',
-                'Total de alunos do 3º ano da TARDE': '3º ANO TARDE',
-                'Total de alunos do 4º ano da MANHÃ': '4º ANO MANHÃ',
-                'Total de alunos do 4º ano da TARDE': '4º ANO TARDE',
-                'Total de alunos do 5º ano da MANHÃ': '5º ANO MANHÃ',
-                'Total de alunos do 5º ano da TARDE': '5º ANO TARDE',
-                'Total de alunos do 6º ano da MANHÃ': '6º ANO MANHÃ',
-                'Total de alunos do 6º ano da TARDE': '6º ANO TARDE',
-                'Total de alunos do 7º ano da MANHÃ': '7º ANO MANHÃ',
-                'Total de alunos do 7º ano da TARDE': '7º ANO TARDE',
-                'Total de alunos do 8º ano da MANHÃ': '8º ANO MANHÃ',
-                'Total de alunos do 8º ano da TARDE': '8º ANO TARDE',
-                'Total de alunos do 9º ano da MANHÃ': '9º ANO MANHÃ',
-                'Total de alunos do 9º ano da TARDE': '9º ANO TARDE',
-                'Total de alunos da EJAI 1ª TOTALIDADE': 'EJAI 1º ANO',
-                'Total de alunos da EJAI 2ª TOTALIDADE': 'EJAI 2º ANO',
-                'Total de alunos da EJAI 3ª TOTALIDADE': 'EJAI 3º ANO',
-                'Total de alunos da EJAI 4ª TOTALIDADE': 'EJAI 4º ANO'
-            }
+            # Detectar colunas automaticamente
+            mapeamento, erro = detectar_colunas_automaticamente(df)
             
-            # Verificar se a coluna obrigatória existe
-            if 'Qual é o nome da sua escola?' not in labels_df.columns:
-                st.error("❌ A coluna 'Qual é o nome da sua escola?' é obrigatória!")
+            if erro:
+                st.error(f"❌ {erro}")
+                st.info("Verifique se existe uma coluna com 'escola' no nome")
                 st.stop()
             
-            # Identificar quais colunas estão presentes na planilha
-            colunas_presentes = [col for col in rename_map.keys() if col in labels_df.columns]
+            # Aplicar mapeamento
+            df_mapeado = df.rename(columns=mapeamento)
+            colunas_finais = list(mapeamento.values())
+            df_final = df_mapeado[colunas_finais].copy()
             
-            # Renomear apenas as colunas que existem
-            colunas_para_renomear = {k: v for k, v in rename_map.items() if k in labels_df.columns}
-            labels_df.rename(columns=colunas_para_renomear, inplace=True)
-            
-            # Selecionar apenas as colunas que existem
-            colunas_existentes = ['NOME ESCOLA'] + [rename_map[col] for col in colunas_presentes if col != 'Qual é o nome da sua escola?']
-            new_df = labels_df[colunas_existentes].copy()
-            
-            # Transformar dados (melt)
-            colunas_anos = [col for col in colunas_existentes if col != 'NOME ESCOLA']
-            
+            # Transformar para formato longo
+            colunas_anos = [col for col in colunas_finais if col != 'NOME ESCOLA']
             if not colunas_anos:
-                st.warning("⚠️ Nenhuma coluna de ano escolar foi encontrada na planilha!")
+                st.warning("Nenhuma coluna de alunos foi detectada!")
                 st.stop()
-            
-            newnew_df = new_df.melt(
+                
+            df_transformado = df_final.melt(
                 id_vars=['NOME ESCOLA'], 
                 value_vars=colunas_anos,
                 var_name='ANO ESCOLAR', 
-                value_name="TOTAL"
+                value_name='TOTAL'
             )
             
-            # Limpar e processar dados
-            clean_df = newnew_df.copy()
-            clean_df = clean_df.dropna()
-            clean_df["TOTAL"] = pd.to_numeric(clean_df["TOTAL"], errors='coerce').fillna(0).astype(int)
-            clean_df = clean_df[clean_df["TOTAL"] > 0]
-
-            if clean_df.empty:
-                st.warning("⚠️ Não foram encontrados dados válidos (valores maiores que 0) na planilha!")
+            # Limpeza cuidadosa dos dados
+            df_transformado = df_transformado.dropna(subset=['NOME ESCOLA'])
+            df_transformado['TOTAL'] = pd.to_numeric(df_transformado['TOTAL'], errors='coerce').fillna(0).astype(int)
+            
+            # Estratégia para NÃO perder escolas:
+            # 1. Manter todas as linhas com TOTAL > 0
+            linhas_com_alunos = df_transformado[df_transformado['TOTAL'] > 0].copy()
+            
+            # 2. Para escolas que só têm TOTAL = 0, manter pelo menos uma linha
+            escolas_com_alunos = linhas_com_alunos['NOME ESCOLA'].unique()
+            escolas_sem_alunos = df_transformado[~df_transformado['NOME ESCOLA'].isin(escolas_com_alunos)]
+            
+            if not escolas_sem_alunos.empty:
+                # Manter uma linha por escola que só tem zeros
+                linhas_sem_alunos = escolas_sem_alunos.groupby('NOME ESCOLA').first().reset_index()
+                df_final_processado = pd.concat([linhas_com_alunos, linhas_sem_alunos], ignore_index=True)
+            else:
+                df_final_processado = linhas_com_alunos.copy()
+            
+            if df_final_processado.empty:
+                st.warning("⚠️ Não há dados válidos na planilha!")
                 st.stop()
 
-            # Aplicar a função corrigida de limpeza dos nomes das escolas
-            # Debug: contar escolas antes da limpeza
-            escolas_antes = new_df['NOME ESCOLA'].nunique()
-            escolas_originais_lista = new_df['NOME ESCOLA'].unique()
+            # Aplicar limpeza automática dos nomes (sempre ativa)
+            df_final_processado['NOME ESCOLA'] = df_final_processado['NOME ESCOLA'].apply(limpar_nome_escola_simples)
             
-            clean_df["NOME ESCOLA"] = clean_df['NOME ESCOLA'].apply(limpar_nome_escola)
-            clean_df = clean_df.sort_values(by='NOME ESCOLA').reset_index(drop=True)
-            
-            # Debug: contar escolas depois da limpeza
-            escolas_depois = clean_df['NOME ESCOLA'].nunique()
-            
-            # Se perdeu escolas, mostrar aviso
-            if escolas_depois < escolas_antes:
-                st.warning(f"⚠️ Atenção: {escolas_antes - escolas_depois} escola(s) foram perdidas na limpeza dos nomes. Total original: {escolas_antes}, Total após limpeza: {escolas_depois}")
-                
-                # Identificar quais escolas foram perdidas
-                escolas_processadas = set()
-                for escola_original in escolas_originais_lista:
-                    escola_limpa = limpar_nome_escola(escola_original)
-                    if len(escola_limpa) >= 5:  # Só adiciona se passou na validação
-                        escolas_processadas.add(escola_limpa)
-                
-                escolas_originais_set = set(escolas_originais_lista)
-                
-                with st.expander("🚨 VER ESCOLAS PERDIDAS - CLIQUE AQUI"):
-                    st.write("**📊 Resumo:**")
-                    st.write(f"- Escolas na planilha original: {len(escolas_originais_set)}")
-                    st.write(f"- Escolas após processamento: {len(escolas_processadas)}")
-                    st.write(f"- Escolas perdidas: {len(escolas_originais_set) - len(escolas_processadas)}")
+            # Ajustar nomes dos anos escolares - adicionar ETAPA para EJA/EJAI
+            def ajustar_nome_ano_escolar(ano_escolar):
+                if pd.isna(ano_escolar):
+                    return ano_escolar
                     
-                    st.write("**🔍 Análise detalhada das primeiras 15 escolas:**")
-                    for i, escola in enumerate(list(escolas_originais_lista)[:15]):
-                        escola_limpa = limpar_nome_escola(escola)
-                        status = "✅ OK" if len(escola_limpa) >= 5 else "❌ PERDIDA"
-                        
-                        st.write(f"**{i+1}.** {status}")
-                        st.write(f"   📝 Original: `{escola}`")
-                        st.write(f"   🔧 Processado: `{escola_limpa}` (tamanho: {len(escola_limpa)})")
-                        
-                        if len(escola_limpa) < 5:
-                            st.write(f"   ⚠️ **MOTIVO DA PERDA:** Nome muito curto após limpeza")
-                        
-                        st.write("---")
+                ano_str = str(ano_escolar).upper().strip()
+                
+                # Se contém EJA ou EJAI
+                if 'EJA' in ano_str:
+                    # Transformar º em ª para EJA (ex: EJA 1º ANO → EJA 1ª ANO)
+                    ano_str = ano_str.replace('º', 'ª')
+                    
+                    # Se já tem ETAPA, não mexe mais
+                    if 'ETAPA' in ano_str:
+                        return ano_str
+                    
+                    # Substitui padrões comuns por ETAPA
+                    if 'ANO' in ano_str:
+                        ano_str = ano_str.replace('ANO', 'ETAPA')
+                    elif 'TOTALIDADE' in ano_str:
+                        ano_str = ano_str.replace('TOTALIDADE', 'ETAPA')
+                    else:
+                        # Se não tem nenhum padrão conhecido, adiciona ETAPA no final
+                        ano_str = ano_str + ' ETAPA'
+                
+                return ano_str
+            
+            df_final_processado['ANO ESCOLAR'] = df_final_processado['ANO ESCOLAR'].apply(ajustar_nome_ano_escolar)
+                
+            df_final_processado = df_final_processado.sort_values('NOME ESCOLA').reset_index(drop=True)
 
-            # Mostrar resumo dos dados
-            st.markdown("### 📈 Resumo dos Dados Processados:")
+            # Resumo final
+            st.markdown("### 📊 Resumo dos Dados Finais:")
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("Escolas", clean_df['NOME ESCOLA'].nunique())
+                st.metric("🏫 Escolas", df_final_processado['NOME ESCOLA'].nunique())
             with col2:
-                st.metric("Anos/Turmas", clean_df['ANO ESCOLAR'].nunique())
+                st.metric("📚 Turmas/Anos", df_final_processado['ANO ESCOLAR'].nunique())
             with col3:
-                st.metric("Total de Alunos", clean_df['TOTAL'].sum())
+                st.metric("👥 Total Alunos", df_final_processado['TOTAL'].sum())
 
-            # Exibir dados processados usando st.dataframe em vez de AgGrid
+            # Mostrar dados processados
             st.markdown("### 📋 Dados Processados:")
-            st.dataframe(clean_df, use_container_width=True, hide_index=True)
-
-
+            st.dataframe(df_final_processado, use_container_width=True, hide_index=True)
 
             st.download_button(
                 "📥 Baixar Planilha Tratada", 
-                convert_df(clean_df), 
-                "base_dados_tratados.csv", 
+                convert_df(df_final_processado), 
+                "dados_processados.csv", 
                 "text/csv"
             )
 
-            # Seção para gerar PDF
+            # Gerar PDF das etiquetas
             st.markdown("### 🏷️ Gerar Etiquetas PDF")
-            logo_file = st.file_uploader("Carregue a imagem da logo (formato JPEG)", type=["jpg", "jpeg"])
-            championship = st.text_input("Nome do Campeonato").upper()
-            stage = st.text_input("Etapa").upper()
+            logo_file = st.file_uploader("Carregar logo (JPEG)", type=["jpg", "jpeg"])
+            championship = st.text_input("Nome do Campeonato/Prova").upper()
+            stage = st.text_input("Etapa/Fase").upper()
 
             if logo_file and championship and stage:
                 try:
-                    pdf_data = gerar_etiquetas(clean_df, logo_file, championship, stage)
+                    pdf_data = gerar_etiquetas(df_final_processado, logo_file, championship, stage)
                     st.download_button(
-                        label="📥 Baixar PDF das Etiquetas",
+                        "📥 Baixar PDF das Etiquetas",
                         data=pdf_data,
                         file_name='etiquetas.pdf',
                         mime='application/pdf'
                     )
+                    st.success("PDF gerado com sucesso!")
                 except Exception as e:
                     st.error(f"❌ Erro ao gerar PDF: {str(e)}")
                     
         except Exception as e:
             st.error(f"❌ Erro ao processar planilha: {str(e)}")
-            st.info("💡 Verifique se o arquivo está no formato correto e tente novamente.")
+            st.info("💡 Verifique se o arquivo CSV está no formato correto.")
