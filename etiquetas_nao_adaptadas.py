@@ -126,10 +126,10 @@ def interface_nao_adaptadas():
         "Total de alunos do 8º ano da TARDE",
         "Total de alunos do 9º ano da MANHÃ",
         "Total de alunos do 9º ano da TARDE",
-        "Total de alunos da EJA 1°",
-        "Total de alunos da EJA 2°",
-        "Total de alunos da EJA 3°", 
-        "Total de alunos da EJA 4°"
+        "Total de alunos da EJA 1ª ETAPA",
+        "Total de alunos da EJA 2ª ETAPA",
+        "Total de alunos da EJA 3ª ETAPA", 
+        "Total de alunos da EJA 4ª ETAPA"
     ]
     
     # Criar texto copiável com todas as colunas

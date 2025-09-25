@@ -7,13 +7,93 @@ import re
 def convert_df(df: pd.DataFrame):
     return df.to_csv(index=False).encode('utf-8')
 
-def limpar_nome_escola(escola):
-    """Remove siglas e códigos INEP dos nomes das escolas"""
-    escola = re.sub(r"\(INEP:\s*\d+\)", "", str(escola), flags=re.IGNORECASE).strip()
-    escola = re.sub(r"\b([A-Z])\s+([A-Z])\b", r"\1\2", escola)
-    siglas = ["CMEI", "EMEI", "EMEF", "EM", "EJA", "CMEF", "CMEBI"]
-    padrao = r"^(?:" + "|".join(siglas) + r")\s+"
-    return re.sub(padrao, "", escola, flags=re.IGNORECASE).strip()
+def limpar_nome_escola_simples(nome):
+    """Função SUPER SIMPLES para limpar nomes - SEM PERDER ESCOLAS"""
+    if pd.isna(nome):
+        return nome
+    
+    nome = str(nome).upper().strip()
+    
+    # Remove códigos INEP se existirem
+    nome = re.sub(r"\(INEP:\s*\d+\)", "", nome).strip()
+    
+    # Lista completa de siglas para remover - apenas remove do início
+    siglas_para_remover = [
+        "E.M.E.F. ",
+        "E.M.E.I.F. ",
+        "M.E.I.F ",
+        "E M E I F ",
+        "E M E F I ",
+        "E M E F ", 
+        "E M E I ",
+        "C M E I ",
+        "ESC EST ",
+        "ESC ",
+        "EMEF ",
+        "EMEI ",
+        "EMEIF ",
+        "CMEI ",
+        "CMEF ",
+        "CMEIF ",
+        "ESCOLA MUNICIPAL DE ENSINO FUNDAMENTAL E INFANTIL ",
+        "ESCOLA MUNICIPAL DE ENSINO FUNDAMENTAL ",
+        "ESCOLA MUNICIPAL DE ENSINO INFANTIL ",
+        "ESCOLA MUNICIPAL ",
+        "CENTRO MUNICIPAL DE EDUCACAO INFANTIL ",
+        "CENTRO MUNICIPAL ",
+        "ESCOLA ",
+        "ESC MUNICIPAL ",
+        "Escola M.E.I.F ",
+        "ESC MUN ",
+        "E I F ",
+        "E F "
+    ]
+    
+    # Remover apenas se começar com a sigla E sobrar nome decente
+    nome_original = nome
+    for sigla in siglas_para_remover:
+        if nome.startswith(sigla):
+            nome_sem_sigla = nome[len(sigla):].strip()
+            if len(nome_sem_sigla) > 3:  # Só aceita se sobrar um nome
+                nome = nome_sem_sigla
+                break
+    
+    # Se deu algo errado, volta pro original
+    if len(nome) < 3:
+        nome = nome_original
+        
+    return nome
+
+def detectar_colunas_automaticamente(df):
+    """Detecta automaticamente as colunas da planilha adaptadas"""
+    
+    # Normalizar nomes das colunas
+    df.columns = [col.upper().strip() for col in df.columns]
+    
+    # Mapear colunas conhecidas
+    mapeamento = {}
+    
+    # Detectar coluna da escola
+    for col in df.columns:
+        if any(palavra in col.upper() for palavra in ['ESCOLA', 'NOME']):
+            mapeamento[col] = 'NOME ESCOLA'
+            break
+    
+    # Detectar outras colunas
+    for col in df.columns:
+        col_upper = col.upper()
+        if 'CATEGORIA' in col_upper or 'DEFICIENCIA' in col_upper:
+            mapeamento[col] = 'CATEGORIA'
+        elif 'ANO' in col_upper and col not in mapeamento:
+            mapeamento[col] = 'ANO ESCOLAR'
+        elif any(palavra in col_upper for palavra in ['QUANTIDADE', 'TOTAL', 'QTD']):
+            mapeamento[col] = 'TOTAL'
+    
+    # Se não encontrou escola
+    if 'NOME ESCOLA' not in mapeamento.values():
+        return None, "Coluna com nome da escola não encontrada!"
+    
+    return mapeamento, None
 
 def interface_adaptadas():
     st.header("Etiquetas - Provas Adaptadas")
@@ -26,7 +106,6 @@ def interface_adaptadas():
         "Quantidade": ["10"]
     }
     st.markdown("### 📊 Estrutura esperada da planilha:")
-    # CORREÇÃO 1: Adicionar hide_index=True para remover os números do índice
     st.dataframe(pd.DataFrame(exemplo), hide_index=True)
 
     uploaded_file = st.file_uploader("Carregue sua planilha (CSV ou Excel)", type=['csv', 'xlsx'])
@@ -39,48 +118,49 @@ def interface_adaptadas():
             else:
                 df = pd.read_excel(uploaded_file)
 
-            # Normalizar nomes das colunas
-            df.columns = [col.upper() for col in df.columns]
+            # Detectar colunas automaticamente
+            mapeamento, erro = detectar_colunas_automaticamente(df)
             
-            # Renomear colunas para padrão interno
-            df = df.rename(columns={
-                'ESCOLA': 'NOME ESCOLA', 
-                'ANO': 'ANO ESCOLAR', 
-                'CATEGORIA': 'CATEGORIA',
-                'QUANTIDADE': 'TOTAL'
-            })
+            if erro:
+                st.error(f"❌ {erro}")
+                st.info("💡 Verifique se sua planilha contém uma coluna com nome da escola")
+                st.stop()
             
-            # Verificar se as colunas obrigatórias existem
-            required_columns = ['NOME ESCOLA', 'CATEGORIA', 'ANO ESCOLAR']
-            missing_columns = [col for col in required_columns if col not in df.columns]
+            # Aplicar mapeamento
+            df_mapeado = df.rename(columns=mapeamento)
+            
+            # Verificar colunas obrigatórias
+            required_columns = ['NOME ESCOLA']
+            missing_columns = [col for col in required_columns if col not in df_mapeado.columns]
             
             if missing_columns:
                 st.error(f"❌ Colunas obrigatórias não encontradas: {', '.join(missing_columns)}")
-                st.info("💡 Verifique se sua planilha contém as colunas: Escola, Categoria, Ano, Quantidade")
+                st.info("💡 Verifique se sua planilha contém pelo menos uma coluna com nome da escola")
                 st.stop()
 
+            # Criar colunas padrão se não existirem
+            if 'CATEGORIA' not in df_mapeado.columns:
+                df_mapeado['CATEGORIA'] = 'GERAL'
+            if 'ANO ESCOLAR' not in df_mapeado.columns:
+                df_mapeado['ANO ESCOLAR'] = 'NÃO INFORMADO'
+            if 'TOTAL' not in df_mapeado.columns:
+                df_mapeado['TOTAL'] = 1
+
             # Processar dados
-            df['ANO ESCOLAR'] = df['ANO ESCOLAR'].astype(str).str.strip()
-            df.loc[~df['ANO ESCOLAR'].str.upper().str.contains("EJAI"), 'ANO ESCOLAR'] += " ANO"
-
-            # Identificar coluna de quantidade
-            col_qtd = [c for c in df.columns if df[c].dtype in ['int64', 'float64']]
-            if col_qtd:
-                quantidade_col = col_qtd[0]
-                df[quantidade_col] = pd.to_numeric(df[quantidade_col], errors='coerce').fillna(0).astype(int)
-                df_transformado = df[df[quantidade_col] > 0].copy()
-                # Renomear para TOTAL se não for
-                if quantidade_col != 'TOTAL':
-                    df_transformado = df_transformado.rename(columns={quantidade_col: 'TOTAL'})
-            else:
-                df_transformado = df.copy()
-                if 'TOTAL' not in df_transformado.columns:
-                    df_transformado['TOTAL'] = 1  # Valor padrão se não houver coluna numérica
-
-            # Limpar nomes das escolas (remover siglas)
-            df_transformado["NOME ESCOLA"] = df_transformado['NOME ESCOLA'].apply(limpar_nome_escola).str.upper()
+            df_mapeado['ANO ESCOLAR'] = df_mapeado['ANO ESCOLAR'].astype(str).str.strip()
             
-            # CORREÇÃO 2: Reset do índice para começar do 0 sequencialmente
+            # Adicionar "ANO" se não for EJAI
+            mask = ~df_mapeado['ANO ESCOLAR'].str.upper().str.contains("EJAI", na=False)
+            mask = mask & ~df_mapeado['ANO ESCOLAR'].str.upper().str.contains("ANO", na=False)
+            df_mapeado.loc[mask, 'ANO ESCOLAR'] += " ANO"
+
+            # Processar coluna TOTAL
+            df_mapeado['TOTAL'] = pd.to_numeric(df_mapeado['TOTAL'], errors='coerce').fillna(1).astype(int)
+            df_transformado = df_mapeado[df_mapeado['TOTAL'] > 0].copy()
+
+            # Limpar nomes das escolas usando a nova função
+            df_transformado["NOME ESCOLA"] = df_transformado['NOME ESCOLA'].apply(limpar_nome_escola_simples)
+            
             df_transformado = df_transformado.sort_values(by='NOME ESCOLA').reset_index(drop=True)
 
             # Verificar se há dados válidos
@@ -98,7 +178,6 @@ def interface_adaptadas():
             with col3:
                 st.metric("Total de Alunos", df_transformado['TOTAL'].sum())
 
-            # CORREÇÃO 3: Exibir dados sem índice
             st.markdown("### 📋 Dados Processados:")
             st.dataframe(df_transformado, use_container_width=True, hide_index=True)
 
