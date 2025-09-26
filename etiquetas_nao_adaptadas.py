@@ -212,32 +212,30 @@ def interface_nao_adaptadas():
             # Aplicar limpeza automática dos nomes (sempre ativa)
             df_final_processado['NOME ESCOLA'] = df_final_processado['NOME ESCOLA'].apply(limpar_nome_escola_simples)
             
-            # Ajustar nomes dos anos escolares - adicionar ETAPA para EJA/EJAI
+            # NOVA LÓGICA: Ajustar nomes dos anos escolares - EJAI adiciona "ª" + ETAPA, EJA mantém como está
             def ajustar_nome_ano_escolar(ano_escolar):
                 if pd.isna(ano_escolar):
                     return ano_escolar
                     
                 ano_str = str(ano_escolar).upper().strip()
                 
-                # Se contém EJA ou EJAI
-                if 'EJA' in ano_str:
-                    # Transformar º em ª para EJA (ex: EJA 1º ANO → EJA 1ª ANO)
-                    ano_str = ano_str.replace('º', 'ª')
-                    
-                    # Se já tem ETAPA, não mexe mais
-                    if 'ETAPA' in ano_str:
-                        return ano_str
-                    
-                    # Substitui padrões comuns por ETAPA
-                    if 'ANO' in ano_str:
-                        ano_str = ano_str.replace('ANO', 'ETAPA')
-                    elif 'TOTALIDADE' in ano_str:
-                        ano_str = ano_str.replace('TOTALIDADE', 'ETAPA')
-                    else:
-                        # Se não tem nenhum padrão conhecido, adiciona ETAPA no final
+                # Para EJAI: adicionar ª no número e ETAPA no final
+                if 'EJAI' in ano_str:
+                    # Se já não contém "ETAPA"
+                    if 'ETAPA' not in ano_str:
+                        # Verificar se tem número sem "ª" e adicionar
+                        if re.search(r'\b\d+\b', ano_str) and not re.search(r'\d+[ªº]', ano_str):
+                            ano_str = re.sub(r'\b(\d+)\b', r'\1ª', ano_str)
                         ano_str = ano_str + ' ETAPA'
+                    return ano_str
                 
-                return ano_str
+                # Para EJA (que não seja EJAI): manter exatamente como está
+                elif 'EJA' in ano_str and 'EJAI' not in ano_str:
+                    return ano_str
+                
+                # Para outros casos (anos normais): manter como estava antes
+                else:
+                    return ano_str
             
             df_final_processado['ANO ESCOLAR'] = df_final_processado['ANO ESCOLAR'].apply(ajustar_nome_ano_escolar)
                 

@@ -149,10 +149,25 @@ def interface_adaptadas():
             # Processar dados
             df_mapeado['ANO ESCOLAR'] = df_mapeado['ANO ESCOLAR'].astype(str).str.strip()
             
-            # Adicionar "ANO" se não for EJAI
-            mask = ~df_mapeado['ANO ESCOLAR'].str.upper().str.contains("EJAI", na=False)
-            mask = mask & ~df_mapeado['ANO ESCOLAR'].str.upper().str.contains("ANO", na=False)
-            df_mapeado.loc[mask, 'ANO ESCOLAR'] += " ANO"
+            # NOVA LÓGICA: Adicionar "ETAPA" APENAS para EJAI, nada para EJA, e "ANO" para o resto
+            for idx, row in df_mapeado.iterrows():
+                ano_escolar = str(row['ANO ESCOLAR']).upper().strip()
+                
+                # Verificar se é EJAI (APENAS EJAI, não EJA)
+                if 'EJAI' in ano_escolar:
+                    # Se já não contém "ETAPA"
+                    if 'ETAPA' not in ano_escolar:
+                        # Verificar se tem número sem "ª" e adicionar
+                        if re.search(r'\b\d+\b', ano_escolar) and not re.search(r'\d+[ªº]', ano_escolar):
+                            ano_escolar = re.sub(r'\b(\d+)\b', r'\1ª', ano_escolar)
+                        df_mapeado.loc[idx, 'ANO ESCOLAR'] = ano_escolar + ' ETAPA'
+                elif 'EJA' in ano_escolar and 'EJAI' not in ano_escolar:
+                    # Para EJA (que não seja EJAI), não adiciona nada, mantém exatamente como está
+                    df_mapeado.loc[idx, 'ANO ESCOLAR'] = ano_escolar
+                else:
+                    # Para outros casos, adicionar "ANO" se não contém "ANO"
+                    if 'ANO' not in ano_escolar:
+                        df_mapeado.loc[idx, 'ANO ESCOLAR'] = ano_escolar + ' ANO'
 
             # Processar coluna TOTAL
             df_mapeado['TOTAL'] = pd.to_numeric(df_mapeado['TOTAL'], errors='coerce').fillna(1).astype(int)
