@@ -14,8 +14,8 @@ def limpar_nome_escola_simples(nome):
     
     nome = str(nome).upper().strip()
     
-    # Remove códigos INEP se existirem
-    nome = re.sub(r"\(INEP:\s*\d+\)", "", nome).strip()
+    # Remove códigos INEP em qualquer formato: (INEP: 123), (INEP 123), INEP: 123, INEP 123
+    nome = re.sub(r"\(?\bINEP:?\s*\d+\)?", "", nome).strip()
     
     # Lista completa de siglas para remover - apenas remove do início
     siglas_para_remover = [
@@ -149,31 +149,36 @@ def interface_adaptadas():
             # Processar dados
             df_mapeado['ANO ESCOLAR'] = df_mapeado['ANO ESCOLAR'].astype(str).str.strip()
             
-            # NOVA LÓGICA: Adicionar "ETAPA" APENAS para EJAI, nada para EJA, e "ANO" para o resto
             for idx, row in df_mapeado.iterrows():
                 ano_escolar = str(row['ANO ESCOLAR']).upper().strip()
                 
-                # Verificar se é EJAI (APENAS EJAI, não EJA)
+                # EJAI: adicionar ª e ETAPA
                 if 'EJAI' in ano_escolar:
-                    # Se já não contém "ETAPA"
                     if 'ETAPA' not in ano_escolar:
-                        # Verificar se tem número sem "ª" e adicionar
-                        if re.search(r'\b\d+\b', ano_escolar) and not re.search(r'\d+[ªº]', ano_escolar):
+                        if re.search(r'\b\d+\b', ano_escolar) and not re.search(r'\d+[ªº°]', ano_escolar):
                             ano_escolar = re.sub(r'\b(\d+)\b', r'\1ª', ano_escolar)
-                        df_mapeado.loc[idx, 'ANO ESCOLAR'] = ano_escolar + ' ETAPA'
-                elif 'EJA' in ano_escolar and 'EJAI' not in ano_escolar:
-                    # Para EJA (que não seja EJAI), não adiciona nada, mantém exatamente como está
+                        ano_escolar = ano_escolar + ' ETAPA'
                     df_mapeado.loc[idx, 'ANO ESCOLAR'] = ano_escolar
+
+                # EJA (sem I): manter exatamente como está
+                elif 'EJA' in ano_escolar:
+                    df_mapeado.loc[idx, 'ANO ESCOLAR'] = ano_escolar
+
+                # Anos normais: garantir º no número e ANO no final
                 else:
-                    # Para outros casos, adicionar "ANO" se não contém "ANO"
+                    # Adicionar º se o número estiver sem ele
+                    if re.search(r'\b\d+\b', ano_escolar) and not re.search(r'\d+[ªº°]', ano_escolar):
+                        ano_escolar = re.sub(r'\b(\d+)\b', r'\1º', ano_escolar)
+                    # Adicionar ANO se não tiver
                     if 'ANO' not in ano_escolar:
-                        df_mapeado.loc[idx, 'ANO ESCOLAR'] = ano_escolar + ' ANO'
+                        ano_escolar = ano_escolar + ' ANO'
+                    df_mapeado.loc[idx, 'ANO ESCOLAR'] = ano_escolar
 
             # Processar coluna TOTAL
             df_mapeado['TOTAL'] = pd.to_numeric(df_mapeado['TOTAL'], errors='coerce').fillna(1).astype(int)
             df_transformado = df_mapeado[df_mapeado['TOTAL'] > 0].copy()
 
-            # Limpar nomes das escolas usando a nova função
+            # Limpar nomes das escolas
             df_transformado["NOME ESCOLA"] = df_transformado['NOME ESCOLA'].apply(limpar_nome_escola_simples)
             
             df_transformado = df_transformado.sort_values(by='NOME ESCOLA').reset_index(drop=True)

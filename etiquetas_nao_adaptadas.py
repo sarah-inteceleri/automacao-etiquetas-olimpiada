@@ -14,8 +14,8 @@ def limpar_nome_escola_simples(nome):
     
     nome = str(nome).upper().strip()
     
-    # Remove códigos INEP se existirem
-    nome = re.sub(r"\(INEP:\s*\d+\)", "", nome).strip()
+    # Remove códigos INEP em qualquer formato: (INEP: 123), (INEP 123), INEP: 123, INEP 123
+    nome = re.sub(r"\(?\bINEP:?\s*\d+\)?", "", nome).strip()
     
     # Lista simples de substituições - apenas remove do início
     siglas_para_remover = [
@@ -92,11 +92,38 @@ def detectar_colunas_automaticamente(df):
     # Para cada coluna de alunos, criar um nome mais limpo
     for col in colunas_alunos:
         nome_limpo = col.replace('Total de alunos do ', '').replace('Total de alunos da ', '')
+        nome_limpo = nome_limpo.replace('Total de alunos ', '')  # cobre "Total de alunos EJAI 1"
         nome_limpo = nome_limpo.replace(' da ', ' ').replace(' do ', ' ')
         nome_limpo = nome_limpo.upper().strip()
         mapeamento[col] = nome_limpo
     
     return mapeamento, None
+
+def ajustar_nome_ano_escolar(ano_escolar):
+    """Ajusta nomes dos anos escolares:
+    - EJAI + número → 'EJA 1', 'EJA 2', etc.
+    - EJA (sem I) → mantém como está
+    - Anos normais → mantém como está
+    """
+    if pd.isna(ano_escolar):
+        return ano_escolar
+        
+    ano_str = str(ano_escolar).upper().strip()
+    
+    # EJAI com número → formatar como "EJA 1", "EJA 2", etc.
+    if 'EJAI' in ano_str:
+        match = re.search(r'\d+', ano_str)
+        if match:
+            return f"EJAI {match.group()}"
+        return ano_str  # fallback se não tiver número
+    
+    # EJA sem I: manter como está
+    elif 'EJA' in ano_str:
+        return ano_str
+    
+    # Anos normais: manter como está
+    else:
+        return ano_str
 
 def interface_nao_adaptadas():
     st.header("Etiquetas - Provas Não Adaptadas")
@@ -129,7 +156,10 @@ def interface_nao_adaptadas():
         "Total de alunos da EJA 1ª ETAPA",
         "Total de alunos da EJA 2ª ETAPA",
         "Total de alunos da EJA 3ª ETAPA", 
-        "Total de alunos da EJA 4ª ETAPA"
+        "Total de alunos da EJA 4ª ETAPA",
+        "Total de alunos EJAI 1",
+        "Total de alunos EJAI 2",
+        "Total de alunos EJAI 3",
     ]
     
     # Criar texto copiável com todas as colunas
@@ -209,34 +239,10 @@ def interface_nao_adaptadas():
                 st.warning("⚠️ Não há dados válidos na planilha!")
                 st.stop()
 
-            # Aplicar limpeza automática dos nomes (sempre ativa)
+            # Aplicar limpeza automática dos nomes das escolas (sempre ativa)
             df_final_processado['NOME ESCOLA'] = df_final_processado['NOME ESCOLA'].apply(limpar_nome_escola_simples)
             
-            # NOVA LÓGICA: Ajustar nomes dos anos escolares - EJAI adiciona "ª" + ETAPA, EJA mantém como está
-            def ajustar_nome_ano_escolar(ano_escolar):
-                if pd.isna(ano_escolar):
-                    return ano_escolar
-                    
-                ano_str = str(ano_escolar).upper().strip()
-                
-                # Para EJAI: adicionar ª no número e ETAPA no final
-                if 'EJAI' in ano_str:
-                    # Se já não contém "ETAPA"
-                    if 'ETAPA' not in ano_str:
-                        # Verificar se tem número sem "ª" e adicionar
-                        if re.search(r'\b\d+\b', ano_str) and not re.search(r'\d+[ªº]', ano_str):
-                            ano_str = re.sub(r'\b(\d+)\b', r'\1ª', ano_str)
-                        ano_str = ano_str + ' ETAPA'
-                    return ano_str
-                
-                # Para EJA (que não seja EJAI): manter exatamente como está
-                elif 'EJA' in ano_str and 'EJAI' not in ano_str:
-                    return ano_str
-                
-                # Para outros casos (anos normais): manter como estava antes
-                else:
-                    return ano_str
-            
+            # Ajustar nomes dos anos escolares
             df_final_processado['ANO ESCOLAR'] = df_final_processado['ANO ESCOLAR'].apply(ajustar_nome_ano_escolar)
                 
             df_final_processado = df_final_processado.sort_values('NOME ESCOLA').reset_index(drop=True)
